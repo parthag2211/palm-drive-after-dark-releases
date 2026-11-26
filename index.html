@@ -556,6 +556,11 @@
 #pixel-dialogue::after{content:"";position:absolute;left:50%;bottom:-6px;width:8px;height:8px;background:#fff0c9;border-right:2px solid #4d4248;border-bottom:2px solid #4d4248;transform:rotate(45deg)}
 #punch-touch{position:absolute;right:0;bottom:53px;min-width:58px;min-height:44px;border:1px solid #d8bd8c;border-radius:2px;background:#38313d;color:#ffe9c1;font:700 13px ui-monospace,monospace;pointer-events:auto;touch-action:manipulation}
 #punch-touch:disabled,#punch-desktop:disabled{opacity:.45}
+.character-picker{grid-column:1/-1;display:flex;align-items:center;gap:7px;margin:4px 0 8px;font:700 13px ui-monospace,Menlo,monospace}
+.character-picker>span{margin-right:3px}.character-picker .character-option{display:inline-flex;align-items:center;gap:6px;padding:2px 11px;min-height:44px;background:#292b33;color:#f5e7cc;border:2px solid #91836c;border-radius:2px;font:inherit;cursor:pointer}
+.character-picker .character-option[aria-pressed=true]{border-color:#ffd686;background:#513e36;box-shadow:inset 0 -2px #ffd686}
+.character-option canvas{height:38px;width:23px;image-rendering:pixelated}
+@media(max-height:450px){#cover .character-picker{margin:0}#cover .cover-text h1 span{font-size:44px}#cover .cover-text h1 i{font-size:28px}}
 </style>
 </head>
 <body>
@@ -719,15 +724,21 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
   }
   const routes=lib.cast.map(([actor,a,b,offset],id)=>({
     id,actor,a,b,offset,d:Math.max(8,Math.hypot(b[0]-a[0],b[1]-a[1])),hitAt:-Infinity,
-    hits:0,phaseStart:0,speed:1
+    hits:0,escape:null
   }));
   function studentAt(t,secs){
-    const cycle=((secs-t.phaseStart)*t.speed*.95/t.d+t.offset)%2, step=cycle<1?cycle:2-cycle;
+    if(t.escape)return t.escape.pos;
+    const cycle=(secs*.95/t.d+t.offset)%2, step=cycle<1?cycle:2-cycle;
     const dx=t.b[0]-t.a[0],dy=t.b[1]-t.a[1];
-    return {x:t.a[0]+step*dx,y:t.a[1]+step*dy,step,sign:cycle<1?1:-1};
+    const sign=cycle<1?1:-1;
+    return {x:t.a[0]+step*dx,y:t.a[1]+step*dy,dx:sign*dx,dy:sign*dy};
   }
   const swing={at:-Infinity,angle:0};
-  function punch(player,clear){
+  const runners=new Set();
+  function advanceRunners(dt,playerSpeed,player){
+    for(const runner of runners)runner.advance(2*playerSpeed*dt,player);
+  }
+  function punch(player,clear,escape){
     const now=performance.now(),secs=now/1000;
     if(now-swing.at<430)return;
     swing.at=now;swing.angle=player.angle;
@@ -748,9 +759,9 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     if(target.hits===2){
       const pos=studentAt(target,secs);
       const away=(pos.x-player.x)*(target.b[0]-target.a[0])+(pos.y-player.y)*(target.b[1]-target.a[1]);
-      target.offset=(away>0 || (away===0 && pos.sign>0))?pos.step:2-pos.step;
-      target.phaseStart=secs;
-      target.speed=2;
+      const exit=away>0 || (away===0 && pos.dx*(target.b[0]-target.a[0])+pos.dy*(target.b[1]-target.a[1])>=0)?target.b:target.a;
+      target.escape=escape([pos.x,pos.y],exit,player);
+      if(target.escape)runners.add(target.escape);
     }
     const line=(target.id+Math.max(0,target.hits-2))%reactions.length;
     say(target.id,reactions[line][target.hits===1?0:1]);
@@ -814,13 +825,13 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     if(performance.now()>until)speaker=null;
     for(const [id,t] of routes.entries()){
       const pos=studentAt(t,secs),elapsed=secs*1000-t.hitAt;
-      const [du,dv]=project(t.b[0]-t.a[0],t.b[1]-t.a[1]);
+      const [du,dv]=project(pos.dx,pos.dy);
       let [u,v]=project(pos.x,pos.y);
       if(elapsed<520){
         const recoil=2.2*Math.sin(Math.PI*elapsed/520);
         u+=t.recoil[0]*recoil;v+=t.recoil[1]*recoil;
       }
-      const r=records.get('actor-'+t.actor+'-'+frameFor(du*pos.sign,dv*pos.sign)+'-'+(Math.floor(secs*4*t.speed+t.offset)%4));
+      const r=records.get('actor-'+t.actor+'-'+frameFor(du,dv)+'-'+(Math.floor(secs*(t.escape?8:4)+t.offset)%4));
       const entry=add(r,u,v,v,true);
       if(entry&&elapsed<270)entry.flash=elapsed/270;
       if(entry&&speaker===id){
@@ -835,7 +846,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     const swingAge=secs*1000-swing.at, swinging=swingAge<290&&!player.bike;
     const angle=swinging?swing.angle:player.angle;
     const dir=project(Math.sin(angle),Math.cos(angle)),frame=view.moving?Math.floor(view.stride/1.3)%4:0;
-    add(records.get('actor-0-'+frameFor(...dir)+'-'+frame),cu,cv,cv+.01,'player',player.bike);
+    add(records.get('actor-'+playerActor+'-'+frameFor(...dir)+'-'+frame),cu,cv,cv+.01,'player',player.bike);
     list.sort((a,b)=>a.sort-b.sort);
     const pedestrian=list.find(s=>s.actor==='player');
     for(const s of list){
@@ -877,7 +888,23 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     const rect=e.target.getBoundingClientRect();
     greet((e.clientX-rect.left)*buffer.width/rect.width,(e.clientY-rect.top)*buffer.height/rect.height);
   });
-  window.PixelCampus={draw,punch,ready:()=>sheets.every(i=>i.complete&&i.naturalWidth>0)};
+  let playerActor=0;
+  function setCharacter(character){playerActor=character==='girl'?1:0;}
+  function portrait(canvas,character){
+    const sprite=records.get('actor-'+(character==='girl'?1:0)+'-front-0');
+    const img=sheets[sprite.page];
+    function paint(){
+      canvas.width=sprite.w;canvas.height=sprite.h;
+      canvas.getContext('2d').drawImage(img,sprite.sx,sprite.sy,sprite.w,sprite.h,0,0,sprite.w,sprite.h);
+    }
+    if(img.complete&&img.naturalWidth)paint();else img.addEventListener('load',paint,{once:true});
+  }
+  function resetRunners(){
+    runners.clear();
+    for(const npc of routes){npc.escape=null;npc.hits=0;npc.hitAt=-Infinity;}
+    speaker=null;swing.at=-Infinity;
+  }
+  window.PixelCampus={draw,punch,advanceRunners,resetRunners,setCharacter,portrait,ready:()=>sheets.every(i=>i.complete&&i.naturalWidth>0)};
 })();
 
 /* Routing in local ground meters. Only shared mapped nodes join separate ways. */
@@ -1013,7 +1040,48 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
       let meters=0;for(let i=1;i<steps.length;i++)meters+=hypot(steps[i-1],steps[i]);
       return {straight,meters,pathFound:true,points:steps,off,connectorMeters:origin.d+d.d,stairsMeters};
     }
-    return {route,nearest,points,segments,mainNodes:sizes[main]||0,componentCount:sizes.length};
+    function escape(start,exit,threat){
+      const join=nearest(exit,false);
+      if(!join)return null;
+      const edge=segments[join.seg];
+      const pos={x:start[0],y:start[1],dx:exit[0]-start[0],dy:exit[1]-start[1]};
+      const approach=[exit,join.q];
+      let previous=-1,node=-1,target=approach.shift();
+      function choose(candidates,pursuer){
+        let best=candidates[0],score=-Infinity;
+        for(const v of candidates){
+          const dx=points[v][0]-pos.x,dy=points[v][1]-pos.y,length=Math.hypot(dx,dy);
+          if(length<.001)continue;
+          const away=(dx*(pos.x-pursuer.x)+dy*(pos.y-pursuer.y))/Math.max(1,Math.hypot(pos.x-pursuer.x,pos.y-pursuer.y));
+          const forward=(dx*pos.dx+dy*pos.dy)/Math.max(.001,Math.hypot(pos.dx,pos.dy));
+          const value=(away+.35*forward)/length;
+          if(value>score){best=v;score=value;}
+        }
+        return best;
+      }
+      function advance(distance,pursuer=threat){
+        while(distance>0){
+          const dx=target[0]-pos.x,dy=target[1]-pos.y,len=Math.hypot(dx,dy);
+          if(len>.00001){
+            const step=Math.min(distance,len);
+            pos.x+=step*dx/len;pos.y+=step*dy/len;pos.dx=dx/len;pos.dy=dy/len;
+            distance-=step;
+            if(step<len)break;
+          }
+          if(approach.length){target=approach.shift();continue;}
+          if(node<0){
+            node=choose([edge.a,edge.b],pursuer);previous=node===edge.a?edge.b:edge.a;
+          }else{
+            const options=links[node].map(([v])=>v).filter(v=>v!==previous);
+            const next=options.length?choose(options,pursuer):previous;
+            previous=node;node=next;
+          }
+          target=points[node];
+        }
+      }
+      return {pos,advance};
+    }
+    return {escape,route,nearest,points,segments,mainNodes:sizes[main]||0,componentCount:sizes.length};
   }
   window.CampusNavigation={create};
 })();
@@ -1430,6 +1498,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
       if(auto&&auto.i>=auto.points.length)auto=null;
       if(!auto)hooks.toast?.('Arrived at '+byId[targetId].name+'.');
     }
+    window.PixelCampus?.advanceRunners(dt,speed,current);
     moved(current.x-ox,current.y-oy);
   }
   function frame(now){
@@ -1468,7 +1537,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
   function punch(){
     if(paused || !canvas || current.bike || !window.PixelCampus)return;
     const from=hits(current.x,current.y);
-    const result=window.PixelCampus.punch(current,(x,y)=>passable(x,y,from));
+    const result=window.PixelCampus.punch(current,(x,y)=>passable(x,y,from),graph.escape);
     if(result==='hit')hooks.toast?.('Hit!');
   }
   function press(e){
@@ -2664,7 +2733,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
   const W = window.CampusWorld, survey = window.CampusSurvey, robot = window.RobotMission, football = window.FootballMission;
   const el = id => document.getElementById(id);
   const saveKey = "palm-drive-after-dark.game.1";
-  const fresh = () => ({version:1, entered:false, position:null, visits:[], finds:[], date:null, invitation:null,
+  const fresh = () => ({version:1, entered:false, character:"guy", position:null, visits:[], finds:[], date:null, invitation:null,
     trophies:[], sound:false, robot:robot.initial(), football:football.initial()});
   const spots = Object.fromEntries(W.places.map(p => [p.id,p]));
   let state = fresh(), storageWorks = true, started = false, activeView = "", nearby = null, here = null;
@@ -2695,6 +2764,8 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     if (!validState(value)) return false;
     const base=fresh();
     state=Object.assign(base,value,{robot:Object.assign(robot.initial(),value.robot),football:Object.assign(football.initial(),value.football)});
+    state.character=value.character==="girl"?"girl":"guy";
+    window.PixelCampus?.setCharacter(state.character);
     return true;
   }
   try { const raw=localStorage.getItem(saveKey); if(raw)load(JSON.parse(raw)); } catch {storageWorks=false;}
@@ -2932,8 +3003,25 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     const edition=survey.full()?"Full edition · 121,704,663 measured points across 7.36 km².":"Browser edition · 655,000 survey samples at Main Quad, Hoover Tower and Stanford Stadium. The full download includes 121,704,663 points.";
     content.append(make("p","game-note",edition));
   }
+  function characterPicker(){
+    const group=make("div","character-picker");
+    group.setAttribute("role","group");group.setAttribute("aria-label","Choose your character");
+    group.append(make("span","","Character"));
+    for(const [id,label] of [["guy","Guy"],["girl","Girl"]]){
+      const choice=button(label,()=>{
+        state.character=id;window.PixelCampus.setCharacter(id);save();
+        for(const b of document.querySelectorAll(".character-picker button"))b.setAttribute("aria-pressed",String(b.dataset.character===id));
+      },"character-option");
+      choice.dataset.character=id;
+      choice.setAttribute("aria-pressed",String(state.character===id));
+      const canvas=document.createElement("canvas");canvas.setAttribute("aria-hidden","true");
+      window.PixelCampus.portrait(canvas,id);choice.prepend(canvas);group.append(choice);
+    }
+    return group;
+  }
   function settings() {
     const content=sheet(panel("settings","Game controls"),"How to play");
+    if(window.PixelCampus)content.append(characterPicker());
     content.append(make("p","","Walk with WASD or the arrow keys. Hold Shift to sprint, or press B to ride. Press E at a landmark, M for the map and J for missions. On a phone, drag the round joystick to move."));
     content.append(make("p","",window.PixelCampus?"Use the map to mark a route, follow it on foot or by bike, or travel instantly. Press C for a wider view. Tap a passing student to say hi. On foot, press F or tap Punch to swing at the nearest student within reach.":"Press V for the 3D survey. Drag the scene to orbit, then pinch or scroll to zoom. In the aerial view, press C to tilt the map. Select a landmark on the map to mark a route, follow it at walking or cycling speed, or travel there instantly."));
     content.append(make("p","","Visit any landmark, in any order. Leave a mission using Back to campus. Robot checkpoints and completed football plays stay saved."));
@@ -2949,12 +3037,13 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
       restart.remove();const confirm=make("div","choices");
       content.append(make("p","game-note","Starting over replaces the save on this device. Copy a save code above to keep this run."),confirm);
       confirm.append(button("Keep playing",settings),button("Start fresh at Main Quad",()=>{
-        const sound=state.sound;state=fresh();state.sound=sound;state.entered=true;
+        const {sound,character}=state;state=fresh();state.sound=sound;state.character=character;window.PixelCampus?.resetRunners();state.entered=true;
         close();if(W.position().bike)W.bike();go("quad");notify("New run. See you on the Farm.");
       }));
     });actions.append(restart);
   }
   function toggleBike(){W.bike();syncCamera();routeHud();save();}
+  if(window.PixelCampus)el("enter").before(characterPicker());
   el("enter").onclick=enter;if(state.entered)el("enter").firstChild.textContent="Continue on campus ";
   el("cover-missions").onclick=()=>{enter();journal();};
   el("scan-vintage").textContent=(survey.full()?"":"3-site sample · ")+"2020 LiDAR · 2024 color";
