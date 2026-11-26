@@ -3007,7 +3007,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     const group=make("div","character-picker");
     group.setAttribute("role","group");group.setAttribute("aria-label","Choose your character");
     group.append(make("span","","Character"));
-    for(const [id,label] of [["guy","Guy"],["girl","Girl"]]){
+    for(const [id,label] of [["guy","Jake"],["girl","Lucy"]]){
       const choice=button(label,()=>{
         state.character=id;window.PixelCampus.setCharacter(id);save();
         for(const b of document.querySelectorAll(".character-picker button"))b.setAttribute("aria-pressed",String(b.dataset.character===id));
