@@ -561,6 +561,27 @@
 .character-picker .character-option[aria-pressed=true]{border-color:#ffd686;background:#513e36;box-shadow:inset 0 -2px #ffd686}
 .character-option canvas{height:38px;width:23px;image-rendering:pixelated}
 @media(max-height:450px){#cover .character-picker{margin:0}#cover .cover-text h1 span{font-size:44px}#cover .cover-text h1 i{font-size:28px}}
+.room-name{display:flex;align-items:center;gap:10px;grid-column:1/-1;font:700 13px ui-monospace,monospace;margin:3px 0 8px}
+.room-name input,.invite-link{background:#252631;color:#fff1cd;border:1px solid #ccb995;border-radius:3px;padding:8px 10px;font:500 16px system-ui;max-width:100%;min-width:0}
+.room-name input{width:12em}.invite-link{width:100%}
+#cover .room-status{grid-column:1/-1;font:600 13px/1.3 system-ui;color:#ffe8a9;margin:0}
+#cover .room-missions{grid-column:1/-1;justify-self:start;background:transparent;border:0;min-height:28px;padding:3px 0;text-decoration:underline}
+#cover .cover-text{max-height:calc(100dvh - 24px);overflow:auto}
+[data-room-join]:disabled{opacity:.72;cursor:default}
+@media(max-width:620px){#hud .topbar .brand{display:none}#hud nav button{padding-inline:8px}#cover [data-room-join]{font-size:14px}}
+@media(max-height:490px){#cover .cover-text{bottom:8px}#cover .room-name{margin:0}#cover .cover-text h1 span{font-size:34px}#cover .cover-text h1 i{font-size:22px}#cover .cover-text p{margin:3px 0}}
+#activity-hud{position:absolute;left:50%;top:66px;transform:translateX(-50%);background:#202630f2;color:#fff1cf;border-left:4px solid #ffcf79;padding:7px 9px;display:flex;align-items:center;gap:9px;max-width:min(570px,88vw);width:max-content;font:600 13px/1.3 system-ui;pointer-events:auto}
+#activity-hud[hidden]{display:none}#activity-hud button{color:#302732;background:#ffda93;border:0;padding:8px;font-weight:700}
+.activity-list,.game-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.activity-list button{text-align:left;display:grid;gap:5px}.activity-list small{color:#f2dbaf;font-weight:400}
+.game-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.game-grid.chairs{grid-template-columns:repeat(4,1fr)}.chairs button,.stones button{font-size:24px;min-height:46px}
+.game-pick-map{display:block;width:100%;height:210px;cursor:crosshair}.food-crop{width:min(280px,100%);height:140px;overflow:hidden;margin:12px 0;border:3px solid #dec6a1}.food-crop img{width:100%;height:100%;object-fit:cover;transform:scale(1.75)}
+#panel-slot .ghost-link{width:100%}#cover .room-missions{color:#fff1d1;background:transparent;border:0;font-weight:600}
+@media(max-width:620px){#activity-hud{top:56px;max-width:92vw}#hud nav button{font-size:12px;padding-inline:7px}.activity-list small{font-size:12px}}
+.lecture-board{background:#263f35;color:#f2e2bc;border:4px solid #80684f;text-align:center;letter-spacing:2px;padding:10px;font:700 13px ui-monospace,monospace;margin-bottom:14px}
+.game-grid.chairs{gap:10px 7px}.game-grid.chairs button{border-bottom:5px solid #aa8057;color:#efbf8f}.game-grid.chairs .empty-seat{background:#394f47;color:#ffdf98}
+.game-grid.stones{padding:15px 10px;background:repeating-linear-gradient(174deg,#3e7176 0 9px,#457a7d 10px 12px,#3e7176 13px 24px);border:4px solid #c3ac86}
+.game-grid.stones button{border-radius:40%;color:#b5c1c1;background:#485855}.game-grid.stones [aria-label="Jump to lit stone"]{background:#817753;color:#ffeaa4;border-color:#e5d392}
+.stadium-flight{display:flex;align-items:flex-end;height:52px;gap:2px;margin:14px 0}.stadium-flight i{flex:1;background:#695c60;border-top:4px solid #ae9c93}.stadium-flight i.climbed{background:#a75945;border-color:#ffd494}
 </style>
 </head>
 <body>
@@ -687,7 +708,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     if(cached.size>150)cached.delete(cached.keys().next().value);
     cached.set(key,c);return c;
   }
-  let contacts=[];
+  let friendHits=[],contacts=[];
   const bag=[];
   let previousLine=null;
   function nextLine(){
@@ -908,10 +929,33 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     const dir=project(Math.sin(angle),Math.cos(angle)),frame=view.moving?Math.floor(view.stride/1.3)%4:0;
     const facing=seat?'front':frameFor(...dir),pose=seat||player.bike?0:frame;
     add(records.get('actor-'+playerActor+'-'+facing+'-'+pose),seat?.u??cu,seat?.v??cv,(seat?.v??cv)+.01,'player',player.bike);
+    friendHits=[];
+    const activities=window.CampusGames;
+    const friends = (window.CampusFriends?.players() || []).filter(p=>!activities||activities.visiblePeer(p.id));
+    const ghost=activities?.ghost();if(ghost)friends.push(ghost);
+    const goal=activities?.marker();
+    if(goal){const [u,v]=project(goal.x,goal.y),x=px(u),y=py(v);
+      g.fillStyle="#483c46";g.fillRect(x-1,y-15,2,15);g.fillStyle="#ffd472";g.fillRect(x+1,y-15,9,5);}
+
+    for (const peer of friends) {
+      const [u,v]=project(peer.x,peer.y);
+      const heading=project(Math.sin(peer.bearing),Math.cos(peer.bearing));
+      const bench=peer.seat && records.get(peer.seat);
+      const facing=bench?'front':frameFor(...heading);
+      const frame=peer.moving && !bench && !peer.bike ? Math.floor(secs*7)%4 : 0;
+      const sprite=records.get('actor-'+(peer.character==='girl'?1:0)+'-'+facing+'-'+frame);
+      const entry=add(sprite,bench?.u??u,bench?.v??v,(bench?.v??v)+.02,'friend',peer.bike);
+      if(entry){
+        Object.assign(entry,{name:peer.name,heading,bench,moving:peer.moving,ghost:peer.ghost});
+        if(!peer.ghost)friendHits.push({id:peer.id,x:entry.x,y:entry.y-13,w:entry.sw,h:entry.sh+13});
+      }
+    }
     function paintActor(s){
       const r=s.r,img=sheets[r.page];
       if(!img.complete||!img.naturalWidth)return;
-      if(s.actor==='player'&&(s.bike||seat)){
+      if(s.actor==='friend' && (s.bike||s.bench)){
+        drawMounted(s,img,k,s.bench?[0,.64]:s.heading,s.moving?secs*9:0,s.bench?s.bench.h*s.bench.scale*.46:0);
+      }else if(s.actor==='player'&&(s.bike||seat)){
         drawMounted(s,img,k,seat?[0,.64]:dir,view.stride,seat?seat.h*seat.scale*.46:0);
       }else g.drawImage(img,r.sx,r.sy,r.w,r.h,s.x,s.y,s.sw,s.sh);
     }
@@ -924,6 +968,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
       if(s.actor==='player'&&!seat){
         g.fillStyle='#84654e';g.fillRect(px(cu)-5,py(cv)+1,10,2);
       }
+      if(s.ghost)g.globalAlpha=.48;
       paintActor(s);g.globalAlpha=1;
       if(s.flash!==undefined){
         const cx=Math.round(x+sw*.5),cy=Math.round(y+sh*.4),radius=Math.round((2+4*s.flash)*k);
@@ -933,6 +978,13 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
         }
       }
       if(obscures && r.type==='landmark' && pedestrian)paintActor(pedestrian);
+    }
+    for (const s of list) if(s.actor==='friend'){
+      g.save();g.font="bold 8px sans-serif";g.textAlign="center";g.textBaseline="middle";
+      const width=Math.min(90,Math.ceil(g.measureText(s.name).width)+6);
+      const x=Math.round(s.x+s.sw/2),y=s.y-7;
+      g.fillStyle="#192a32";g.fillRect(x-width/2,y-5,width,10);
+      g.fillStyle="#aff3da";g.fillText(s.name,x,y,width-4);g.restore();
     }
     if(pedestrian && swinging){
       const amount=Math.sin(Math.PI*swingAge/290),cx=px(cu),cy=Math.round(pedestrian.y+pedestrian.sh*.39);
@@ -951,7 +1003,9 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
   document.addEventListener('click',e=>{
     if(e.target.id!=='world')return;
     const rect=e.target.getBoundingClientRect();
-    greet((e.clientX-rect.left)*buffer.width/rect.width,(e.clientY-rect.top)*buffer.height/rect.height);
+    const x=(e.clientX-rect.left)*buffer.width/rect.width,y=(e.clientY-rect.top)*buffer.height/rect.height;
+    const hit=friendHits.find(p=>x>=p.x-4&&x<=p.x+p.w+4&&y>=p.y&&y<=p.y+p.h);
+    if(hit){window.CampusGames?.choose("race",hit.id);return;}greet(x,y);
   });
   let playerActor=0;
   function setCharacter(character){playerActor=character==='girl'?1:0;}
@@ -970,6 +1024,552 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     speaker=null;swing.at=-Infinity;
   }
   window.PixelCampus={draw,punch,advanceRunners,resetRunners,setCharacter,portrait,ready:()=>sheets.every(i=>i.complete&&i.naturalWidth>0)};
+})();
+
+/* A room owns only live presence. The local game always owns movement and mission saves. */
+window.CampusFriends = (() => {
+  const params = new URLSearchParams(location.search);
+  let room = /^[a-f0-9]{24}$/.test(params.get("room")) ? params.get("room") : "";
+  let selfId=null;
+  const peers = new Map();
+  let socket = null, timer = 0, generation = 0, checking = 0, state = "solo", available = false;
+  let message = "", lastPacket = "", received = 0, pingAt = 0, hooks;
+  let custom = "";
+  try { custom = localStorage.getItem("palm-drive.display-name") || ""; } catch {}
+  const defaultName = () => hooks.character() === "girl" ? "Lucy" : "Jake";
+  const name = () => custom.trim() || defaultName();
+  const address = () => new URL(room ? "/api/rooms/" + room : "/api/status", location.origin);
+  const invite = () => { const url = new URL(location.href); url.searchParams.set("room",room); url.hash=""; return url.href; };
+  function update() {
+    document.querySelectorAll("[data-room-join]").forEach(b => {
+      b.disabled = !available || state === "joining";
+      b.textContent = state === "joining" ? "Joining…" : !available ? "Multiplayer unavailable" : room ? "Join multiplayer" : "Multiplayer";
+    });
+    document.querySelectorAll("[data-room-status]").forEach(p => {p.textContent=message;p.hidden=!message;});
+    const b=document.getElementById("room-open");
+    if (b) b.textContent = state === "online" ? "Room · " + (1+peers.size) : "Friends";
+    hooks?.changed();
+  }
+  function finish(text) {
+    generation++; checking++; clearInterval(timer);
+    const previous = socket; socket = null;
+    if (previous && previous.readyState < 2) previous.close();
+    peers.clear(); selfId=null; window.CampusGames?.network(null); state="solo"; lastPacket=""; message=text; update();
+  }
+  async function probe() {
+    if (state !== "solo") return;
+    const seq=++checking;
+    try {
+      const res=await fetch(address(),{cache:"no-store",signal:AbortSignal.timeout(6000)});
+      const info=res.ok && await res.json();
+      if(seq!==checking || state!=="solo")return;
+      available=info?.available===true && !info.full;
+      message=available ? "" : info?.full ? "This room is full. Solo is available." : "Multiplayer is unavailable. Solo is available.";
+    } catch {
+      if(seq!==checking || state!=="solo")return;
+      available=false; message="Multiplayer is unavailable. Solo is available.";
+    }
+    update();
+  }
+  function fail() {
+    const inGame=hooks.started();
+    available=false;
+    const text=inGame ? "Multiplayer is unavailable. You’re playing solo." : "Multiplayer is unavailable. Solo is available.";
+    finish(text); if(inGame)hooks.notify(text);
+  }
+  function sendPose() {
+    const p=window.CampusWorld.position();
+    const packet=JSON.stringify({x:p.x,y:p.y,bearing:p.bearing,bike:p.bike,seat:p.seat,character:hooks.character(),name:name()});
+    if (packet!==lastPacket) {socket.send(packet);lastPacket=packet;}
+  }
+  function remember(p) {
+    const prev=peers.get(p.id);
+    const t=performance.now();
+    const from=prev ? sample(prev,t) : p;
+    const distance=Math.hypot(p.x-from.x,p.y-from.y);
+    peers.set(p.id,{...p,fromX:distance<30?from.x:p.x,fromY:distance<30?from.y:p.y,at:t,moving:distance>.05&&distance<30});
+  }
+  function sample(p,t) {
+    const f=Math.min(1,(t-p.at)/180);
+    return {...p,x:p.fromX+(p.x-p.fromX)*f,y:p.fromY+(p.y-p.fromY)*f,moving:p.moving&&t-p.at<320};
+  }
+  async function join() {
+    if(state!=="solo")return;
+    checking++; state="joining"; const seq=++generation;message="Connecting to campus…";update();
+    if(!room)room=Array.from(crypto.getRandomValues(new Uint8Array(12)),v=>v.toString(16).padStart(2,"0")).join("");
+    try {
+      const res=await fetch(address(),{cache:"no-store",signal:AbortSignal.timeout(6000)});
+      const info=res.ok && await res.json();
+      if(seq!==generation)return;
+      if(info?.full){available=false;finish("This room is full. Solo is available.");return;}
+      if(!info?.available)throw Error();
+      const url=address();url.pathname+="/socket";url.protocol=location.protocol==="https:"?"wss:":"ws:";
+      socket=new WebSocket(url);
+      received=pingAt=Date.now();
+      socket.onclose=socket.onerror=()=>{if(seq===generation)fail();};
+      socket.onmessage=e=>{
+        if(seq!==generation)return;
+        received=Date.now();
+        if(e.data==="pong")return;
+        const event=JSON.parse(e.data);
+        if(event.type==="welcome"){
+          selfId=event.id;
+          const alreadyStarted=hooks.started();
+          hooks.enter();hooks.close();
+          const first=event.players[0], W=window.CampusWorld;
+          if(first && !alreadyStarted)W.restore({...W.position(),x:first.x,y:first.y,seat:null});
+          for(const p of event.players)remember(p);
+          state="online"; message=""; available=true;sendPose();update();
+          window.CampusGames?.network(event.game,event.now);
+          hooks.notify("On campus together. Tap Room to invite friends.");
+        } else if(event.type==="activity"){window.CampusGames?.network(event.game,event.now);}
+        else if(event.type==="activity-error"){hooks.notify(event.reason);}
+        else if(event.type==="player") {const fresh=!peers.has(event.player.id);remember(event.player);if(fresh)update();}
+        else if(event.type==="left"){peers.delete(event.id);update();}
+      };
+      timer=setInterval(()=>{
+        if(seq!==generation)return;
+        if(Date.now()-received>22000)return fail();
+        if(state!=="online" || socket?.readyState!==1)return;
+        try {sendPose();if(Date.now()-pingAt>7000){socket.send("ping");pingAt=Date.now();}} catch {fail();}
+      },200);
+    } catch {if(seq===generation)fail();}
+  }
+  function leave(){finish("");probe();}
+  function field(){
+    const label=document.createElement("label");label.className="room-name";label.append("Player name");
+    const input=document.createElement("input");input.type="text";input.autocomplete="off";input.maxLength=96;input.value=name();input.dataset.roomName="";input.dir="auto";
+    input.oninput=()=>{custom=Array.from(input.value).slice(0,48).join("");if(input.value!==custom)input.value=custom;try{localStorage.setItem("palm-drive.display-name",custom);}catch{}
+      document.querySelectorAll("[data-room-name]").forEach(el=>{if(el!==input)el.value=name();});};
+    input.onblur=()=>{input.value=name();};label.append(input);return label;
+  }
+  function names(){if(!custom)document.querySelectorAll("[data-room-name]").forEach(el=>el.value=defaultName());}
+  function install(callbacks){
+    hooks=callbacks;
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden){if(state==="solo")probe();else if(state==="online"&&Date.now()-received>22000)fail();}});
+    window.addEventListener("pagehide",()=>finish(""));
+    window.addEventListener("online",probe);
+    if(location.protocol==="http:"||location.protocol==="https:")probe();
+    else {message="Multiplayer is available in the hosted game.";update();}
+  }
+  return {refreshPose(){lastPacket="";},get id(){return selfId;},command(op,fields={}){if(state==="online")socket.send(JSON.stringify({...fields,type:"activity",op}));},install,join,leave,probe,field,names,invite,update,peers,
+    players:()=>Array.from(peers.values(),p=>sample(p,performance.now())),
+    get online(){return state==="online";},get joining(){return state==="joining";},get available(){return available;},get message(){return message;}};
+})();
+
+// Six bytes per sample keep ordinary challenge links small enough to text.
+window.CampusGhost = (() => {
+  const key="palm-drive.ghosts.v1";
+  function pack(points,goal){
+    const buf=new DataView(new ArrayBuffer((points.length+1)*6));
+    function write(i,x,y,t){
+      buf.setInt16(i*6,Math.round(x*2));buf.setInt16(i*6+2,Math.round(y*2));buf.setUint16(i*6+4,t);
+    }
+    write(0,goal.x,goal.y,1);
+    points.forEach((p,i)=>write(i+1,p.x,p.y,Math.round(p.t/20)*2+Number(p.bike)));
+    return btoa(String.fromCharCode(...new Uint8Array(buf.buffer))).replaceAll("+","-").replaceAll("/","_").replace(/=+$/,"");
+  }
+  function unpack(code){
+    if(typeof code!=="string"||code.length<24||code.length>5200 || !/^[\w-]+$/.test(code))return null;
+    try{
+      const bytes=Uint8Array.from(atob(code.replaceAll("-","+").replaceAll("_","/")),c=>c.charCodeAt(0));
+      if(bytes.length%6||bytes.length<18)return null;
+      const v=new DataView(bytes.buffer),points=[];let goal;
+      for(let i=0;i<bytes.length;i+=6){
+        const x=v.getInt16(i)/2,y=v.getInt16(i+2)/2,n=v.getUint16(i+4);
+        if(x< -1150||x>1505||y< -1332||y>1443)return null;
+        if(!i){if(n!==1)return null;goal={x,y,label:"Ghost finish"};continue;}
+        const t=(n>>1)*20;
+        if(points.length?t<=points.at(-1).t:t!==0)return null;
+        points.push({x,y,t,bike:!!(n&1)});
+      }
+      if(Math.hypot(points.at(-1).x-goal.x,points.at(-1).y-goal.y)>12)return null;
+      return {goal,points,time:points.at(-1).t,code};
+    }catch{return null;}
+  }
+  function saved(){try{return JSON.parse(localStorage.getItem(key)||"[]").map(unpack).filter(Boolean);}catch{return [];}}
+  function keep(code){
+    const run=unpack(code);if(!run)return;
+    const same=r=>Math.hypot(r.goal.x-run.goal.x,r.goal.y-run.goal.y)<2&&Math.hypot(r.points[0].x-run.points[0].x,r.points[0].y-run.points[0].y)<2;
+    const all=saved(),best=all.find(same);
+    if(!best||best.time>run.time){try{localStorage.setItem(key,JSON.stringify([code,...all.filter(r=>!same(r)).map(r=>r.code)].slice(0,8)));}catch{}}
+  }
+  function sample(run,time){
+    const pts=run.points;let i=1;
+    while(i<pts.length-1&&pts[i].t<time)i++;
+    const a=pts[i-1],b=pts[i],f=Math.max(0,Math.min(1,(time-a.t)/(b.t-a.t)));
+    return {x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f,bearing:Math.atan2(b.x-a.x,b.y-a.y),bike:a.bike,character:"girl",moving:time<run.time,name:"Ghost",ghost:true};
+  }
+  return {pack,unpack,keep,saved,sample};
+})();
+
+// Short, touch-sized encounters used at physical checkpoints on the campus map.
+window.CampusEncounters = (() => {
+  const palette=["#e86f61","#72c9b3","#e9b750","#9e9fde"];
+  const random=n=>Math.floor(Math.random()*n);
+  function bike(){
+    return {frame:random(4),basket:random(2),lock:random(3)};
+  }
+  function bikeArt(b){
+    const c=document.createElement("canvas");c.width=68;c.height=44;
+    c.style.imageRendering="pixelated";const g=c.getContext("2d");g.lineWidth=2;
+    function path(color,pts){g.strokeStyle=color;g.beginPath();pts.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.stroke();}
+    for(const x of [15,50]){g.beginPath();g.arc(x,30,10,0,Math.PI*2);g.strokeStyle="#f6dfae";g.stroke();}
+    path(palette[b.frame],[[15,30],[26,15],[32,30],[15,30],[41,15],[26,15]]);
+    path(palette[b.frame],[[32,30],[41,15],[50,30]]);path("#e9ded3",[[41,15],[40,8],[47,8]]);
+    path("#eee1c7",[[22,13],[30,13]]);if(b.basket){g.fillStyle="#b58758";g.fillRect(46,8,16,8);path("#e7bf86",[[46,11],[62,11]]);}
+    g.strokeStyle=palette[b.lock+1];g.lineWidth=3;g.strokeRect(23,20,5,9);return c;
+  }
+  function bikeLabel(b){return [ ["coral","teal","gold","violet"][b.frame],b.basket?"basket":"bare handlebars",["teal","gold","violet"][b.lock]+" lock"].join(", ");}
+  function rack(target){
+    const bikes=[target];
+    while(bikes.length<6){const b=bike();if(!bikes.some(v=>bikeLabel(v)===bikeLabel(b)))bikes.push(b);}
+    for(let i=5;i>0;i--){const j=random(i+1);[bikes[i],bikes[j]]=[bikes[j],bikes[i]];}
+    return bikes;
+  }
+  function render(pane,a,ui){
+    const {button,write,done,refresh,close}=ui;
+    if(a.scene==="memory"){
+      write("You parked this bike before class. Remember its frame, handlebars and lock.");
+      pane.append(bikeArt(a.bike));return;
+    }
+    if(a.scene==="rack"){
+      write("Class is out. Which bike is yours? A wrong key costs five seconds.");
+      const grid=document.createElement("div");grid.className="game-grid";
+      for(const [i,b] of a.rack.entries()){
+        const btn=button("",()=>{if(b===a.bike)done("Bike found",ui.seconds()+" including key penalties.");
+          else {a.tried.add(i);a.penalty+=5000;refresh();}});
+        btn.setAttribute("aria-label",bikeLabel(b));btn.disabled=a.tried.has(i);btn.append(bikeArt(b));grid.append(btn);
+      }pane.append(grid);return;
+    }
+    if(a.scene==="chair"){
+      write("You slip into the back of the lecture hall. Pick the empty chair before someone takes it.");
+      const board=document.createElement("div");board.className="lecture-board";board.textContent="CS 106A   /   Lecture 09";pane.append(board);
+      const seats=document.createElement("div");seats.className="game-grid chairs";
+      for(let i=0;i<12;i++){const free=i===a.chair;
+        const b=button(free?"▱":"●",()=>{if(free)done("Made it to class",ui.seconds()+" from the dorm to your chair.");
+          else {a.penalty+=2000;a.chair=(a.chair+5)%12;refresh();}});
+        b.className+=" "+(free?"empty-seat":"occupied-seat");b.setAttribute("aria-label",free?"Empty chair":"Occupied chair");seats.append(b);}
+      pane.append(seats);return;
+    }
+    if(a.scene==="stones"){
+      write("Jump to the lit stone. Cross all five without falling in.");
+      const grid=document.createElement("div");grid.className="game-grid stones";
+      for(let i=0;i<3;i++){const lit=i===a.stone;
+        const b=button(lit?"◆":"◇",()=>{if(lit){a.steps++;if(a.steps===5){a.scene="";a.stage=2;close();return;}a.stone=(i+1+random(2))%3;}
+          else {a.steps=0;a.penalty+=2000;}refresh();});b.setAttribute("aria-label",lit?"Jump to lit stone":"Jump to dark stone");grid.append(b);}
+      pane.append(grid);write(a.steps+" / 5 stones");return;
+    }
+    if(a.scene==="stairs"){
+      write("Climb eight stadium steps. Alternate your left and right foot.");
+      const flight=document.createElement("div");flight.className="stadium-flight";
+      flight.setAttribute("aria-hidden","true");
+      for(let i=0;i<8;i++){const step=document.createElement("i");step.style.height=(8+i*4)+"px";step.className=i<a.steps?"climbed":"";flight.append(step);}pane.append(flight);
+      for(const side of ["Left","Right"])pane.append(button(side,()=>{if(side===(a.steps%2?"Right":"Left"))a.steps++;else a.penalty+=800;
+        if(a.steps===8)done("Triathlon complete",ui.seconds()+" across bike, water and stairs.");else refresh();}));
+      write(a.steps+" / 8 steps");return;
+    }
+    if(a.scene==="food"){
+      write(a.clue.text);const img=document.createElement("img");img.src=window.CAMPUS_PHOTOS[a.clue.id].src;
+      img.alt="Cropped campus photo clue";const crop=document.createElement("div");crop.className="food-crop";crop.append(img);pane.append(crop);
+      pane.append(button("Go find the table",()=>{a.scene="";close();}));return;
+    }
+  }
+  return {bike,rack,render};
+})();
+
+window.CampusGames=(()=>{
+  const F=window.CampusFriends,G=window.CampusGhost,E=window.CampusEncounters;
+  const titles={race:"Race me there",ghost:"Beat my ghost",class:"The 9:29 scramble",tri:"Campus triathlon",sardines:"Sardines",coffee:"The Coupa coffee run",bike:"Find your bike",food:"The free-food text"};
+  const descriptions={race:"Pick a friend and drop a finish flag.",ghost:"Record a route or race a replay.",class:"Beat the bell and claim a lecture seat.",tri:"Ride, fountain-hop, climb the stadium.",sardines:"One hides. Find them and hide together.",coffee:"Deliver four drinks with the lids still on.",bike:"Remember your bike before class lets out.",food:"Identify the room from a cropped photo."};
+  const clues=[
+    {id:"green",text:"“Sandwiches left upstairs. Look for the reading room with the big windows.”"},
+    {id:"union",text:"“Lunch by the fountain outside our meeting. We saved you one.”"},
+    {id:"pitch",text:"“Case discussion just wrapped. Leftover wraps by the GSB courtyard.”"},
+    {id:"hoover",text:"“Look up. The bells just rang over our table.”"}];
+  const $=id=>document.getElementById(id), W=()=>window.CampusWorld;
+  const place=id=>W().places.find(p=>p.id===id);
+  const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  const label=p=>p.label||p.name?.split(" •")[0]||"Finish flag";
+  const format=ms=>(Math.max(0,ms)/1000).toFixed(1)+" s";
+  const clock=()=>performance.now();
+  let h,a=null,room=null,offset=0,lastResult=null,lastPhase="",tab="",hud,readout,actionButton,record=null;
+  let imported=G.unpack(location.hash.startsWith("#ghost=")?location.hash.slice(7):"");
+  function home(p,bike=false){
+    W().stopFollow();W().restore({...W().position(),x:p.x,y:p.y,seat:null,bike,target:null});
+  }
+  function pane(title,id="detail"){tab=id;return h.pane(title);}
+  function write(p,text){const el=document.createElement("p");el.textContent=text;p.append(el);return el;}
+  function button(text,fn){return h.button(text,fn,"soft");}
+  function option(p,id,fn){const b=button("",fn);const strong=document.createElement("strong");strong.textContent=titles[id];const small=document.createElement("small");small.textContent=descriptions[id];b.append(strong,small);p.append(b);}
+  function mine(){return room?.members.includes(F.id);}
+  function activeRoom(){return mine()&&["race","seek","hide"].includes(room.phase);}
+  function busy(){return !!a || activeRoom();}
+  function locked(){
+    if(room?.phase==="race"&&mine())return Date.now()+offset<room.at || Object.hasOwn(room.times,F.id);
+    return mine()&&((room.phase==="hide" && room.host!==F.id)||(room.phase==="seek"&&(room.host===F.id||room.found.includes(F.id))));
+  }
+  function stop(){a=null;record=null;W().target(null);h.close();update();}
+  function elapsed(){return clock()-a.at+a.penalty;}
+  function result(title,text,code=null,retry=null){
+    if(a && title==="Coffee delivered"){
+      try{
+        const score=Math.round(a.served.reduce((sum,v)=>sum+v,0)/4),time=Math.round(elapsed());
+        const key="palm-drive.coffee-best",best=JSON.parse(localStorage.getItem(key)||"null");
+        if(!best||score>best.score||(score===best.score&&time<best.time)){
+          localStorage.setItem(key,JSON.stringify({score,time}));text+=" Personal best!";
+        }else{text+=" Best on this device: "+best.score+"% in "+format(best.time)+".";}
+      }catch{}
+    }
+    if(a){const kind=a.kind,dest=a.end,replay=a.replay,start=a.start;
+      retry=()=>startSolo(kind,{goal:dest,replay,start});}
+    a=null;record=null;W().target(null);lastResult={title,text,code,retry};showResult();update();
+  }
+  function showResult(){
+    const r=lastResult,p=pane(r.title,"result");write(p,r.text);
+    if(r.code)p.append(button("Share ghost challenge",()=>shareGhost(p,r.code)));
+    if(r.retry)p.append(button("Rematch",r.retry));
+    p.append(button("All activities",hub),button("Back to campus",h.close));
+  }
+  async function shareGhost(p,code){
+    const url=new URL(location.protocol==="file:"?window.GAME_LINK:location.href);
+    url.search="";url.hash="ghost="+code;
+    if(navigator.share){try{await navigator.share({title:"Beat my campus ghost",url:url.href});return;}catch(e){if(e.name==="AbortError")return;}}
+    let box=p.querySelector(".ghost-link");if(!box){box=document.createElement("input");box.className="ghost-link";box.readOnly=true;box.setAttribute("aria-label","Ghost challenge link");p.append(box);}
+    box.value=url.href;box.select();try{await navigator.clipboard.writeText(url.href);h.notify("Ghost link copied.");}catch{}
+  }
+  function hub(){
+    if(a){details();return;}
+    if(room && (mine() || room.to===F.id || room.kind==="sardines") && room.phase!=="done"){roomScreen();return;}
+    const p=pane("Campus activities","hub"),grid=document.createElement("div");grid.className="activity-list";p.append(grid);
+    for(const id of Object.keys(titles))option(grid,id,()=>choose(id));
+    if(lastResult)p.append(button("Last result",showResult));
+  }
+  function choose(id,friend=null){
+    if(busy()){details();return;}
+    if(id==="race"||id==="sardines"){
+      const p=pane(titles[id]);write(p,descriptions[id]);
+      if(!F.online){p.append(button("Open friends room",()=>{$("room-open").click();}));return;}
+      if(id==="sardines"){p.append(button("Invite room to Sardines",()=>F.command("offer",{kind:id})));return;}
+      if(friend){mapPick(p,goal=>F.command("offer",{kind:"race",to:friend,goal}));return;}
+      if(!F.peers.size)write(p,"Invite a friend from Room to set up a race.");
+      for(const peer of F.peers.values())p.append(button("Challenge "+peer.name,()=>choose("race",peer.id)));return;
+    }
+    if(id==="ghost"){
+      const p=pane(titles.ghost);
+      if(imported)p.append(button("Race the shared ghost · "+format(imported.time),()=>startSolo("ghost",{replay:imported})));
+      for(const r of G.saved())p.append(button("Race personal best · "+format(r.time),()=>startSolo("ghost",{replay:r})));
+      write(p,"Set a finish for a new recording.");mapPick(p,goal=>startSolo("ghost",{goal}));return;
+    }
+    startSolo(id);
+  }
+  function mapPick(p,fn){
+    const map=document.createElement("canvas");map.className="game-pick-map";map.setAttribute("aria-label","Tap to drop a finish flag");p.append(map);
+    const msg=write(p,"Tap a path on the map or choose a landmark.");
+    const sel=document.createElement("select");sel.setAttribute("aria-label","Finish landmark");
+    sel.add(new Option("Choose a landmark…",""));for(const s of W().places)sel.add(new Option(label(s),s.id));p.append(sel);
+    let goal;const confirm=button("Set finish",()=>goal&&fn(goal));p.append(confirm);confirm.disabled=true;
+    function select(g){if(!g){msg.textContent="Pick a walkable spot on campus.";confirm.disabled=true;goal=null;return;}
+      goal={x:g.x,y:g.y,label:label(g)};const far=dist(W().position(),g)>=30;confirm.disabled=!far;msg.textContent=far?"Finish · "+label(g):"Pick a finish at least 30 m away.";
+      W().drawMap(map);W().flagOnMap(map,g);}
+    sel.onchange=()=>select(place(sel.value));map.onclick=e=>{const r=map.getBoundingClientRect();sel.value="";select(W().mapPoint(map,(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height));};
+    requestAnimationFrame(()=>W().drawMap(map));
+  }
+  function startSolo(kind,opts={}){
+    if(activeRoom())return roomScreen();
+    h.close();const pos=W().position();
+    a={kind,at:clock(),stage:0,scene:"",penalty:0,start:opts.start||pos};
+    const s=a;
+    if(kind==="ghost"){
+      s.replay=opts.replay;s.end=s.replay?.goal||opts.goal;s.start=s.replay?.points[0]||s.start;
+      home(s.start,s.start.bike);record=[];capture(record,0,W().position());
+    }else if(kind==="class"){
+      home(place("lake"));s.end=place("quad");s.limit=80000;s.chair=Math.floor(Math.random()*12);
+    }else if(kind==="tri"){
+      home(place("oval"),true);s.end=place("field");
+    }else if(kind==="coffee"){
+      home(place("quad"));s.stops=["green","hoover","lab","union"];s.end=place(s.stops[0]);s.volume=100;s.served=[];s.last=W().position();s.lastAt=clock();
+    }else if(kind==="bike"){
+      home(place("green"));s.bike=E.bike();s.rack=E.rack(s.bike);s.tried=new Set();s.scene="memory";s.until=clock()+3500;s.end=place("green");
+    }else if(kind==="food"){
+      home(place("quad"));s.clue=clues[Math.floor(Math.random()*clues.length)];s.end=place(s.clue.id);s.scene="food";s.limit=100000;
+    }
+    if(s.scene)encounter();else if(kind!=="ghost")W().target(s.end.id);
+    update();
+  }
+  function encounter(){
+    const p=pane(titles[a.kind],"encounter");
+    E.render(p,a,{button,write:t=>write(p,t),done:result,seconds:()=>format(elapsed()),refresh:encounter,close:()=>{h.close();update();}});
+  }
+  function details(){
+    if(!a)return room?roomScreen():hub();
+    const p=pane(titles[a.kind]);write(p,instruction());p.append(button("Resume",()=>{if(a.scene)encounter();else h.close();}),button("Leave activity",stop));
+  }
+  function instruction(){
+    if(!a)return "";
+    if(a.kind==="class")return "9:29 · "+(W().position().bike?"Park your bike and take a seat in Main Quad":"From Lagunita to the last seat in Main Quad");
+    if(a.kind==="tri")return ["Bike to the Claw","Cross the five stones","Go on foot to the stadium stairs"][a.stage];
+    if(a.kind==="coffee")return "Deliver cup "+(a.stage+1)+"/4 to "+label(a.end)+" · "+Math.round(a.volume)+"% full";
+    if(a.kind==="bike")return a.stage?"Find your bike at the library rack":"Walk to the Quad for class";
+    if(a.kind==="food")return "Free sandwiches · Follow the photo clue";
+    return "Beat "+(a.replay?format(a.replay.time):"the clock")+" · "+label(a.end);
+  }
+  function capture(arr,t,p){if(t>620000)return;const prev=arr.at(-1);if(!prev||t-prev.t>=20)arr.push({x:p.x,y:p.y,bike:p.bike,t});}
+  function finishRecording(arr,t,p,goal){
+    if(!arr?.length||t>600000)return null;
+    if(t-arr.at(-1).t<25)arr.pop();
+    capture(arr,t,p);const code=G.pack(arr,goal);if(!G.unpack(code))return null;G.keep(code);return code;
+  }
+  function tickSolo(pos,now){
+    if(a.limit && elapsed()>=a.limit){result(a.kind==="food"?"Last sandwich taken":"The bell rang",a.kind==="food"?"The table was at "+label(a.end)+".":"You missed the seat. Try a different route.");return;}
+    if(a.scene==="memory"&&now>=a.until){a.scene="";a.end=place("quad");W().target("quad");if(h.view()==="games")h.close();}
+    if(a.scene)return;
+    if(a.kind==="coffee"){
+      const d=dist(pos,a.last),dt=(now-a.lastAt)/1000;
+      if(d>.05 && dt>0){const speed=d/dt,turn=Math.abs(Math.atan2(Math.sin(pos.bearing-a.last.bearing),Math.cos(pos.bearing-a.last.bearing)));
+        a.volume=Math.max(0,a.volume-Math.max(0,speed-12)*dt*.037-(pos.bike?turn*.75:0));}
+      a.last=pos;a.lastAt=now;
+    }
+    if(a.kind==="ghost" && now-a.at-record.at(-1).t>=1000)capture(record,now-a.at,pos);
+    if(a.kind==="ghost" && now-a.at>600000){result("Time expired","Ghost runs last up to ten minutes.");return;}
+    if(dist(pos,a.end)>9)return;
+    if(a.kind==="ghost"){
+      const t=elapsed(),code=finishRecording(record,t,pos,a.end),difference=a.replay?t-a.replay.time:null;
+      result("Ghost finish",format(t)+(difference===null?" on your route.":difference<0?" · You won by "+format(-difference):" · Behind by "+format(difference)),code);
+    }else if(a.kind==="class"&&!pos.bike){a.scene="chair";encounter();}
+    else if(a.kind==="tri"&&a.stage===0&&pos.bike){
+      W().bike();a.stage=1;a.steps=0;a.stone=1;a.scene="stones";a.end=place("stadium");W().target("stadium");encounter();
+    }else if(a.kind==="tri"&&a.stage===2&&!pos.bike){a.steps=0;a.scene="stairs";encounter();}
+    else if(a.kind==="bike"){if(!a.stage){a.stage=1;a.end=place("green");W().target("green");h.notify("Class is out. Head back to the bike rack.");}
+      else{a.scene="rack";encounter();}}
+  }
+  function interact(){
+    if(!a)return false;
+    if(a.scene){encounter();return true;}
+    const p=W().position();
+    if(a.kind==="food"){
+      if(dist(p,a.end)<=13){result("Lunch secured","Found the sandwiches at "+label(a.end)+" with "+Math.ceil((a.limit-elapsed())/1000)+" s to spare.");return true;}
+      if(W().places.some(s=>dist(s,p)<12)){h.notify("No sandwiches here. Check the photo clue.");return true;}
+    }
+    if(a.kind==="coffee" && dist(p,a.end)<13){
+      a.served.push(a.volume);a.stage++;
+      if(a.stage===4){const score=a.served.reduce((s,v)=>s+v,0)/4;result("Coffee delivered",Math.round(score)+"% average fill across four cups · "+format(elapsed()));}
+      else{a.end=place(a.stops[a.stage]);W().target(a.end.id);h.notify("Cup delivered. Next stop: "+label(a.end));}
+      return true;
+    }
+    return false;
+  }
+  let roomRun=null,roomCode=null;
+  function command(op){F.command(op,{id:room.id});}
+  function roomScreen(){
+    if(!room)return hub();
+    const g=room,p=pane(titles[g.kind],"room");
+    if(g.phase==="invite"){
+      write(p,(g.names[g.host]||"A friend")+(g.kind==="race"?" challenges you to "+label(g.goal)+".":" is hiding first. Find them and stay hidden."));
+      if(!mine()&&(g.kind==="sardines"||g.to===F.id))p.append(button("Accept invitation",()=>command("join")));
+      if(mine())write(p,g.members.map(id=>g.names[id]).join(" · "));
+      if(g.host===F.id&&g.kind==="sardines"&&g.members.length>=2)p.append(button("Start hiding",()=>command("start")));
+      if(mine()||g.to===F.id)p.append(button(mine()?"Cancel participation":"Decline",()=>command("leave")));
+    }else if(g.phase==="done"){
+      if(g.kind==="race"){
+        const sorted=Object.entries(g.times).sort((x,y)=>x[1]-y[1]);
+        write(p,sorted.length?(g.names[sorted[0][0]]+" wins"+(sorted[1]?" by "+format(sorted[1][1]-sorted[0][1]):" by finishing first")):"Time expired");
+        for(const [id,t] of sorted)write(p,g.names[id]+" · "+format(t));
+        if(mine()){p.append(button("Rematch to the start",()=>rematch(g)));if(roomCode)p.append(button("Share my ghost",()=>shareGhost(p,roomCode)));}
+      }else{
+        write(p,g.found.length===g.members.length-1?"Everyone found the hiding spot!":"Time’s up. "+g.found.length+" of "+(g.members.length-1)+" seekers found the spot.");
+        g.found.forEach((id,i)=>write(p,(i+1)+". "+g.names[id]));
+        if(mine())p.append(button("Hide next round",()=>F.command("offer",{kind:"sardines"})));
+      }
+    }else{
+      write(p,roomHint());
+      if(g.phase==="hide"&&g.host===F.id)p.append(button("Hide here",()=>command("hide")));
+      p.append(button("Return to play",h.close),button("Leave round",()=>command("leave")));
+    }
+  }
+  function rematch(g){
+    const other=g.members.find(id=>id!==F.id);
+    F.command("offer",{kind:"race",to:other,goal:{...g.start,label:"Original start line"}});
+  }
+  function roomHint(){
+    if(!room)return "";const g=room,ms=Date.now()+offset;
+    if(g.phase==="invite")return g.host===F.id?"Invitation open":"Activity invitation · "+titles[g.kind];
+    if(g.phase==="race"){
+      if(ms<g.at)return "On your marks · "+Math.ceil((g.at-ms)/1000);
+      if(Object.hasOwn(g.times,F.id))return "Finished in "+format(g.times[F.id])+" · Waiting for your rival";
+      return "Race to "+label(g.goal)+" · "+format(ms-g.at);
+    }
+    if(g.phase==="hide")return (g.host===F.id?"Pick a hiding spot within 160 m":"Give the hider a head start")+" · "+Math.ceil(Math.max(0,g.at-ms)/1000)+" s";
+    if(g.phase==="seek")return (g.host===F.id||g.found.includes(F.id)?"Stay hidden":"Find the hider within 160 m of the start")+" · "+g.found.length+"/"+(g.members.length-1)+" found";
+    return "Round complete";
+  }
+  function network(g,serverNow){
+    if(!h)return;
+    const prev=room;room=g||null;if(serverNow)offset=serverNow-Date.now();
+    if(!g){
+      if(prev&&prev.phase!=="done"&&prev.members.includes(F.id)){h.notify("Room activity ended. Free roam is available.");}
+      if(prev&&h.view()==="games"&&tab==="room")h.close();
+      roomRun=null;lastPhase="";update();return;
+    }
+    if(g.id!==prev?.id){roomCode=null;roomRun=null;lastPhase="";}
+    const member=mine();
+    if(g.phase!=="invite"&&g.phase!=="done"&&member && lastPhase!==g.phase){
+      a=null;record=null;
+      if(g.phase==="race"||g.phase==="hide"){home(g.start);if(g.phase==="race"){roomRun=[];capture(roomRun,0,W().position());}}
+      if(g.phase==="seek"&&g.host===F.id&&dist(W().position(),g.start)>160)home(g.start);
+      h.close();
+    }
+    if(member && g.phase==="seek" && lastPhase!=="seek")F.refreshPose();
+    if(g.spot && g.found.includes(F.id) && !prev?.found.includes(F.id))home(g.spot);
+    if(member&&g.kind==="race" && roomRun && Object.hasOwn(g.times,F.id)){
+      roomCode=finishRecording(roomRun,g.times[F.id],W().position(),g.goal);roomRun=null;
+    }
+    if(g.phase==="done"&&member&&lastPhase!=="done"){roomScreen();}
+    else if(h.view()==="games"&&tab==="room")roomScreen();
+    else if(g.phase==="invite" && !a && (g.host===F.id||g.to===F.id||g.kind==="sardines") && prev?.id!==g.id){roomScreen();}
+    lastPhase=g.phase;update();
+  }
+  function marker(){
+    if(room?.kind==="race"&&activeRoom())return room.goal;
+    if(a && !a.scene && a.kind!=="food")return a.end;
+    return null;
+  }
+  function update(){
+    if(!h||!hud)return;
+    const participating=room && (mine()||room.to===F.id||(room.kind==="sardines"&&room.phase==="invite"));
+    const g=participating?room:null,p=W().position();
+    hud.hidden=!a&&!g; if(hud.hidden)return;
+    let msg=a?instruction():roomHint();const goal=marker();
+    if(goal){const d=dist(p,goal),dx=goal.x-p.x,dy=goal.y-p.y;
+      const ang=Math.atan2((.259*dx+.966*dy)*.64,-.966*dx+.259*dy);
+      msg+=" · "+["→","↘","↓","↙","←","↖","↑","↗"][(Math.round(ang/(Math.PI/4))+8)%8]+" "+Math.round(d)+" m";}
+    if(a?.limit)msg+=" · "+Math.ceil(Math.max(0,a.limit-elapsed())/1000)+" s";
+    readout.textContent=msg;
+    actionButton.textContent=a?.scene?"Open":a?.kind==="coffee"&&dist(p,a.end)<13?"Hand over cup":a?.kind==="food"?(dist(p,a.end)<13?"Take lunch":"Photo clue"):g?.phase==="hide"&&g.host===F.id?"Hide here":g?.phase==="invite"?"Invitation":"Details";
+  }
+  function install(host){
+    h=host;hud=document.createElement("div");hud.id="activity-hud";hud.hidden=true;
+    readout=document.createElement("span");actionButton=button("Details",()=>{
+      if(a?.scene)return encounter();
+      if(a?.kind==="food" && dist(W().position(),a.end)>=13){a.scene="food";return encounter();}
+      if(a&&["coffee","food"].includes(a.kind)&&interact())return;
+      if(room?.phase==="hide"&&room.host===F.id){command("hide");return;}
+      if(a)details();else roomScreen();
+    });
+    hud.append(readout,actionButton);$("hud").append(hud);
+    const launch=button("Games",hub);launch.id="activities-open";$("missions-open").before(launch);
+    const cover=$("cover-missions"),activities=button(imported?"Race shared ghost":"Campus activities",()=>{h.enter();if(imported)choose("ghost");else hub();});
+    activities.className="room-missions";cover.after(activities);
+    setInterval(()=>{
+      if(!h.started()||document.hidden)return;
+      const now=clock(),p=W().position();
+      if(a)tickSolo(p,now);
+      if(roomRun&&room?.phase==="race"&&Date.now()+offset-room.at-roomRun.at(-1).t>=1000)capture(roomRun,Date.now()+offset-room.at,p);
+      update();
+    },120);
+  }
+  return {install,network,locked,busy,interact,marker,hub,choose,details,footLeg:()=>a?.kind==="tri"&&a.stage===2,visiblePeer:id=>!(room?.kind==="sardines"&&["hide","seek"].includes(room.phase)&&(id===room.host||room.found.includes(id))&&F.id!==room.host&&!room.found.includes(F.id)),
+    ghost:()=>a?.replay?G.sample(a.replay,elapsed()):null};
 })();
 
 /* Routing in local ground meters. Only shared mapped nodes join separate ways. */
@@ -1512,6 +2112,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     return id?info(id):null;
   }
   function follow(id=targetId) {
+    if(window.CampusGames?.busy()){hooks.toast?.("Ride or walk this activity yourself.");return false;}
     if(!byId[id])return false;
     setTarget(id);const r=info(id);if(!r.pathFound||r.arrived)return false;
     current.seat=null;detect();auto={id,i:1,points:r.points};
@@ -1550,6 +2151,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     dirty=true;detect();hooks.move?.();
   }
   function move(dt){
+    if(window.CampusGames?.locked())return;
     let x=stick[0]+(keys.has('d')||keys.has('arrowright')?1:0)-(keys.has('a')||keys.has('arrowleft')?1:0);
     let y=-stick[1]+(keys.has('w')||keys.has('arrowup')?1:0)-(keys.has('s')||keys.has('arrowdown')?1:0);
     const len=Math.hypot(x,y),speed=current.bike?pace.bike:keys.has('shift')?pace.jog:pace.walk;
@@ -1603,7 +2205,9 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     if(!scan)render();
   }
   function action(){
-    if(paused)return false;detect();
+    if(paused)return false;
+    if(window.CampusGames?.interact())return true;
+    detect();
     if(bench){
       current.seat=current.seat?null:bench;
       if(current.seat){current.bike=false;stopFollow();clearControls();}
@@ -1620,6 +2224,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     zoom=clamp(zoom*Math.pow(1.35,steps),.34,2.95);dirty=true;return baseZoom*zoom;
   }
   function toggleBike(){
+    if(!current.bike && window.CampusGames?.footLeg()){hooks.toast?.("The last leg is on foot.");return false;}
     if(paused)return current.bike;if(current.seat){current.seat=null;detect();}current.bike=!current.bike;dirty=true;hooks.move?.();
     hooks.toast?.(current.bike?'Cycling · '+pace.bike+' m/s':'On foot · '+pace.walk+' m/s');return current.bike;
   }
@@ -1704,7 +2309,17 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     const x=(u*m.w-m.ox)/m.s,y=(m.oy-v*m.h)/m.sy;
     let best=null,d=Infinity;for(const p of places){const n=Math.hypot(x-p.x,y-p.y);if(n<d){d=n;best=p.id;}}return best;
   }
-  window.CampusWorld={start,places,travel,restore,position,pause,action,punch,bike:toggleBike,drawMap,pickMap,target:setTarget,
+  function mapPoint(target,u,v){
+    const m=viewMaps.get(target);if(!m)return null;
+    const x=(u*m.w-m.ox)/m.s,y=(m.oy-v*m.h)/m.sy;
+    return passable(x,y,[])?{x,y,label:"Finish flag"}:null;
+  }
+  function flagOnMap(target,p){
+    const m=viewMaps.get(target);if(!m)return;
+    const g=target.getContext("2d");screenTransform(g,m);g.fillStyle="#ffce73";
+    g.fillRect(m.ox+p.x*m.s-2,m.oy-p.y*m.sy-12,3,13);g.fillRect(m.ox+p.x*m.s,m.oy-p.y*m.sy-12,10,5);
+  }
+  window.CampusWorld={mapPoint,flagOnMap,start,places,travel,restore,position,pause,action,punch,bike:toggleBike,drawMap,pickMap,target:setTarget,
     targetId:()=>targetId,routeInfo:info,follow,following:()=>!!auto,stopFollow,camera:cycleCamera,cameraMode:()=>mode,zoomBy,
     zoomLevel:()=>baseZoom*zoom,heading:()=>current.angle,
     input(dx,dy){stick=[clamp(Number(dx)||0,-1,1),clamp(Number(dy)||0,-1,1)];},
@@ -2939,6 +3554,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     else el("enter").focus();
   }
   function go(id) {
+    if(window.CampusGames?.busy()){notify("Finish or leave the activity before fast travel.");return;}
     if(!spots[id])return;
     close();W.target(null);W.travel(id);
     if(survey.active()&&!survey.full()&&!["quad","hoover","stadium"].includes(id))survey.disable();
@@ -3062,6 +3678,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
   }
   function interact(place) {
     if(!started||activeView||!place)return;
+    if(window.CampusGames?.busy()){window.CampusGames.details();return;}
     unique(state.visits,place.id);
     if(place.id==="union")return cafe();
     const id=robot.stops.includes(place.id)?"robot":football.stops.includes(place.id)?"football":null;
@@ -3099,7 +3716,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     group.append(make("span","","Character"));
     for(const [id,label] of [["guy","Jake"],["girl","Lucy"]]){
       const choice=button(label,()=>{
-        state.character=id;window.PixelCampus.setCharacter(id);save();
+        state.character=id;window.PixelCampus.setCharacter(id);window.CampusFriends?.names();save();
         for(const b of document.querySelectorAll(".character-picker button"))b.setAttribute("aria-pressed",String(b.dataset.character===id));
       },"character-option");
       choice.dataset.character=id;
@@ -3121,6 +3738,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
     content.append(make("h3","","Your save"),make("p","game-note",storageWorks?"Progress saves on this device. Copy a save code to carry it to another browser.":"This browser keeps progress for this session. Copy a save code to keep it."));
     const field=make("textarea","save-box");field.setAttribute("aria-label","Save code");field.placeholder="Paste a Palm Drive save code";const actions=make("div","choices");
     actions.append(button("Copy save code",()=>{save();const code="PDA1."+btoa(Array.from(new TextEncoder().encode(JSON.stringify(state)),x=>String.fromCharCode(x)).join(""));field.value=code;field.select();copy(code,"Save code copied.","Select and copy your save code.");}),button("Restore this code",()=>{
+      if(window.CampusGames?.busy()){notify("Leave the activity before restoring a save.");return;}
       try{const txt=field.value.trim();if(!txt.startsWith("PDA1.")||txt.length>30000)throw Error();const value=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(txt.slice(5)),c=>c.charCodeAt(0))));if(!load(value))throw Error();if(state.position)W.restore(state.position);save();close();notify("Save restored.");}catch{notify("That save code could not be read.");}
     }));content.append(field,actions);
     const restart=button("Start a new run",()=>{
@@ -3136,6 +3754,39 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
   if(window.PixelCampus)el("enter").before(characterPicker());
   el("enter").onclick=enter;if(state.entered)el("enter").firstChild.textContent="Continue on campus ";
   el("cover-missions").onclick=()=>{enter();journal();};
+  const friends=window.CampusFriends;
+  if(friends){
+    const status=()=>{const p=make("p","room-status");p.dataset.roomStatus="";p.setAttribute("role","status");return p;};
+    function joinButton(){const b=button("Multiplayer",friends.join,"quiet-button");b.dataset.roomJoin="";return b;}
+    const hudButton=button("Friends",roomPanel);hudButton.id="room-open";el("map-open").before(hudButton);
+    const first=el("enter");
+    first.firstChild.textContent=state.entered?"Continue solo ":"Play solo ";
+    first.onclick=()=>{friends.leave();enter();};
+    el("cover-missions").onclick=()=>{friends.leave();enter();journal();};
+    first.after(joinButton());
+    el("cover-missions").before(status());
+    el("cover-missions").classList.add("room-missions");
+    function roomPanel(){
+      const content=sheet(panel("friends","Campus friends"),friends.online?"Your room":"Play with friends");
+      content.append(friends.field());
+      if(friends.online){
+        const list=make("p","game-note");list.id="room-roster";content.append(list);
+        const address=make("input","invite-link");address.readOnly=true;address.value=friends.invite();address.setAttribute("aria-label","Room invite link");address.onclick=()=>address.select();
+        content.append(address,button("Share room link",async()=>{
+          if(navigator.share){try{await navigator.share({title:"Play on my campus",url:address.value});return;}catch(e){if(e.name==="AbortError")return;}}
+          await copy(address.value,"Room link copied.","Select and copy your room link.");
+        },"cream-button"),button("Continue solo",()=>{friends.leave();close();notify("You’re playing solo.");}));
+      }else{
+        content.append(joinButton(),button("Check availability",friends.probe),status());friends.probe();
+      }
+      friends.update();
+    }
+    friends.install({character:()=>state.character,started:()=>started,enter,close,notify,changed(){
+      if(activeView==="friends" && el("room-roster") && !friends.online){roomPanel();return;}
+      if(el("room-roster"))el("room-roster").textContent=[...friends.peers.values()].map(p=>p.name).reduce((a,b)=>a+" · "+b,"You");
+    }});
+    first.before(friends.field());
+  }
   el("scan-vintage").textContent=(survey.full()?"":"3-site sample · ")+"2020 LiDAR · 2024 color";
   if(survey.full()){const a=el("download-full");a.replaceWith(make("span","installed-edition","Full 3D edition installed"));}
   el("map-info").onclick=mapInfo;
@@ -3147,6 +3798,7 @@ window.CampusGeo={"origin":{"lat":37.43,"lon":-122.17},"bounds":[-1150.6,-1331.8
   el("scan-left").onclick=()=>survey.rotate(-1);el("scan-right").onclick=()=>survey.rotate(1);
   el("scan-palette").onclick=()=>{el("scan-palette").textContent=survey.style();};
   el("scan-camera").onclick=()=>{el("scan-camera").textContent=survey.preset()?"Survey view":"Student view";};
+  window.CampusGames?.install({enter,close,notify,button,started:()=>started,view:()=>activeView,pane:title=>sheet(panel("games","Campus activities"),title)});
   el("help-cover").onclick=settings;el("settings-open").onclick=settings;el("map-open").onclick=()=>showMap();el("radar-open").onclick=()=>showMap();
   el("missions-open").onclick=journal;el("bike-touch").onclick=toggleBike;el("bike-desktop").onclick=toggleBike;
   if(window.PixelCampus)for(const id of ["punch-touch","punch-desktop"])el(id).onclick=W.punch;
